@@ -5,26 +5,22 @@ const app = express();
 app.use(bodyParser.json());
 app.use(express.static("public"));
 
-/*******************************DUMMY COMMENT*********************/
+const mongoose = require("mongoose");
 
-let DUMMY_COMMENTS = [
-  {
-    id: "c1",
-    creator: "Ali",
-    content: "Congratulations!",
-  },
-];
+const userSchema = new mongoose.Schema({
+  name: { type: String, require: true },
+  email: { type: String, require: true },
+  password: { type: String, require: true, minlength: 6 },
+  comments: { type: String, require: true }
+});
+const User = mongoose.model("User", userSchema);
 
-/*******************************DUMMY USERS*********************/
+const commentSchema = new mongoose.Schema({
+  content: { type: String, require: true },
+  creator: { type: String, require: true },
+});
+const Comment = mongoose.model("Comment", commentSchema);
 
-const DUMMY_USERS = [
-  {
-    id: "u1",
-    name: "Ali Sadek",
-    email: "AliSadek95@gmail.com",
-    password: "Password",
-  },
-];
 
 
 /*******************************HOME ROUTE*********************/
@@ -33,18 +29,27 @@ app
   .route("/api/")
 
   .get(function (req, res, next) {
-    res.send(DUMMY_COMMENTS);
+    Comment.find({}, function (err, foundComments) {
+      res.send({
+        foundComments: foundComments.map((comment) =>
+          comment.toObject({ getters: true })
+        ),
+      });
+    });
   })
 
   .post(function (req, res, next) {
-    const { id, content, creator } = req.body;
-    const createdComment = {
-      id,
+    const { content, creator } = req.body;
+    const createdComment = new Comment({
       content,
       creator,
-    };
-    DUMMY_COMMENTS.push(createdComment);
-    res.status(201).json({ comment: createdComment });
+    });
+    if (createdComment.content.trim().length === 0) {
+      res.send("Comment is empty");
+    } else {
+      createdComment.save();
+      res.status(201).json({ comment: createdComment });
+    }
   });
 
 /*******************************USERS ROUTE*********************/
@@ -53,7 +58,24 @@ app
   .route("/api/users/")
 
   .get(function (req, res) {
-    res.json({ user: DUMMY_USERS });
+      User.find({}, "-password",function(err, foundUsers){
+          if(err){
+              console.log(err);
+          }
+          else  if(foundUsers){
+           
+
+            if(foundUsers.length === 0){
+                res.send("No Users Found");
+            }
+              else {
+
+                  res.json({ foundUsers: foundUsers.map(user=> user.toObject({getters:true}))});
+              }
+            
+          }
+        
+      })
   });
 
 /*******************************COMMENTS ROUTE*********************/
@@ -63,30 +85,39 @@ app
 
   .get(function (req, res, next) {
     const commentId = req.params.cid;
-    const comment = DUMMY_COMMENTS.find((c) => {
-      return c.id === commentId;
+    Comment.findById(commentId, (err, foundComment) => {
+      if (err) {
+        console.log(err);
+      } else {
+        if (foundComment) {
+          res.json({ foundComment: foundComment.toObject({ getters: true }) });
+        } else {
+          res.status(404).json("NOT FOUND");
+        }
+      }
     });
-    res.json({ comment });
   })
 
   .patch(function (req, res, next) {
     const content = req.body.content;
     const commentId = req.params.cid;
-    const updatedComment = DUMMY_COMMENTS.find((c) => {
-      c.id === commentId;
+    let comment = Comment.findById(commentId, (err, foundComment) => {
+      foundComment.content = content;
+      foundComment.save();
+      res
+        .status(200)
+        .json({ foundComment: foundComment.toObject({ getters: true }) });
     });
-    const commentIndex = DUMMY_COMMENTS.findIndex((c) => {
-      c.id === commentId;
-    });
-    updatedComment.content = content;
-    DUMMY_COMMENTS[commentIndex] = updatedComment;
-    res.status(200).json({ comment: updatedComment });
   })
 
   .delete(function (req, res, next) {
     const commentId = req.params.cid;
-    DUMMY_COMMENTS = DUMMY_COMMENTS.filter((comment) => {
-      return comment.id !== commentId;
+    Comment.findByIdAndRemove(commentId, function (err, deletedComment) {
+      if (err) {
+        console.log(err);
+      } else {
+        console.log("Comment Deleted");
+      }
     });
     res.status(200).json({ comment: "deleted Comment" });
   });
@@ -98,29 +129,60 @@ app
 
   .post(function (req, res, next) {
     const { email, password } = req.body;
-    const foundUser = DUMMY_USERS.find((user) => {
-      return user.email === email;
-    });
-    if (!foundUser || foundUser.password !== password) {
-      res.send("Cannot find User");
-    }
+    User.findOne({email:email}, function(err,foundUser){
+        if(err){
+            console.log(err);
+        }   else if(foundUser){
+                if(foundUser.password=== password){
+                    res.json({ message: "Logged in!" });
+                }
+                else{
+                    res.send("Invalid Username or Password");
+                }
+            }
 
-    res.json({ message: "Logged in!" });
+            else{
+              res.send("Cannot find User");
+        }
+    })  
   });
 
 /*******************************SIGNUP ROUTE*********************/
 
 app.route("/api/signup").post(function (req, res, next) {
-  const { id, name, email, password } = req.body;
-  const existingUser = DUMMY_USERS.find(user=>{return user.email ===email});
-  if(existingUser){
-      res.send("User Already Exists!")
-  }
-  const newUser = { id, name, email, password };
-  DUMMY_USERS.push(newUser);
-  res.status(201).json({ user: newUser });
+  const { name, email, password } = req.body;
+  User.findOne({ email: email}, function (err, existingUser) {
+    if (err) {
+      console.log(err);
+    } else if (existingUser) {
+      res.send("User Already Exists!");
+    } else if (
+      email.trim().length === 0 ||
+      password.trim().length === 0 ||
+      name.trim().length === 0
+    ) {
+      res.send("Data Entered is invalid, please check your data");
+    } else if (password.length < 6) {
+      res.send("Password length must be at least 6 characters");
+    } else {
+      const newUser = new User({ name, email, password });
+      newUser.save((err));
+      res.status(201).json({ user: newUser.toObject({getters:true}) });
+    }
+  });
 });
 
-app.listen(5000, function () {
-  console.log("Server started on port 5000");
-});
+/**************************Connect*********************/
+mongoose
+  .connect(
+    "mongodb+srv://AliSadek:theguestbook@cluster0-h6z9v.mongodb.net/guestBook?retryWrites=true&w=majority",
+    { useNewUrlParser: true, useUnifiedTopology: true }
+  )
+  .then(() => {
+    app.listen(5000, function () {
+      console.log("Server started on port 5000");
+    });
+  })
+  .catch((err) => {
+    console.log(err);
+  });
