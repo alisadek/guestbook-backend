@@ -11,13 +11,13 @@ const userSchema = new mongoose.Schema({
   name: { type: String, require: true },
   email: { type: String, require: true },
   password: { type: String, require: true, minlength: 6 },
-  comments: { type: String, require: true }
+  comments: [{ type: mongoose.Types.ObjectId, required: true, ref: "Comment"}]
 });
 const User = mongoose.model("User", userSchema);
 
 const commentSchema = new mongoose.Schema({
   content: { type: String, require: true },
-  creator: { type: String, require: true },
+  creator: { type: mongoose.Types.ObjectId, required: true, ref: "User"},
 });
 const Comment = mongoose.model("Comment", commentSchema);
 
@@ -27,6 +27,8 @@ const Comment = mongoose.model("Comment", commentSchema);
 
 app
   .route("/api/")
+  
+            /***************FETCH ALL COMMENTS******************/
 
   .get(function (req, res, next) {
     Comment.find({}, function (err, foundComments) {
@@ -38,6 +40,8 @@ app
     });
   })
 
+            /***************CREATE A COMMENT******************/
+
   .post(function (req, res, next) {
     const { content, creator } = req.body;
     const createdComment = new Comment({
@@ -47,10 +51,28 @@ app
     if (createdComment.content.trim().length === 0) {
       res.send("Comment is empty");
     } else {
-      createdComment.save();
+        User.findById(creator, async function(err,user){
+            if(err){
+                console.log(err);
+            }
+                else{
+                    if(!user){
+                        res.send("No user exists under that id");
+                    }
+                    else{
+                        const sess = await mongoose.startSession();
+                        sess.startTransaction();
+                        createdComment.save({session: sess});
+                        user.comments.push(createdComment);
+                        user.save({session: sess});
+                        sess.commitTransaction();
+                    }
+                }
+        });
+        }
       res.status(201).json({ comment: createdComment });
     }
-  });
+  );
 
 /*******************************USERS ROUTE*********************/
 
@@ -83,6 +105,7 @@ app
 app
   .route("/api/:cid")
 
+  /*******************************FETCH A COMMENT*********************/
   .get(function (req, res, next) {
     const commentId = req.params.cid;
     Comment.findById(commentId, (err, foundComment) => {
@@ -97,7 +120,7 @@ app
       }
     });
   })
-
+ /*******************************EDIT COMMENT*********************/
   .patch(function (req, res, next) {
     const content = req.body.content;
     const commentId = req.params.cid;
@@ -109,6 +132,10 @@ app
         .json({ foundComment: foundComment.toObject({ getters: true }) });
     });
   })
+
+
+/*******************************DELETE COMMENT*********************/
+
 
   .delete(function (req, res, next) {
     const commentId = req.params.cid;
