@@ -20,7 +20,7 @@ Installation:
 3) Run two terminals.
 
 
-4) In the first terminal, go to the directory where you installed the backend.
+4) In the first terminal, go to the directory where you cloned the backend (this repository).
 
 5) Install any the required packages.
 
@@ -30,7 +30,7 @@ Installation:
 
 `npm start`  
 
-7) In the second terminal, go to the directory where you cloned the frontend (this repository).
+7) In the second terminal, go to the directory where you cloned the frontend.
 
 8) Repeat steps 5 and 6.
 
